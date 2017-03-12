@@ -1,0 +1,250 @@
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>Werewolf</title>
+	<script src="https://cdn.static.runoob.com/libs/jquery/1.10.2/jquery.min.js"></script>
+	<style type="text/css">
+		body { margin:0px auto; padding:0; width:800px; cursor:default;}
+		canvas { border:dashed 1px #CCC; background-color: #FFE7BA;}
+	</style>
+</head>
+
+<body style="margin:0px; padding:0px;">
+	<canvas id="can" style="position:absolute;"></canvas>
+	<div id="msg" style="position:absolute; padding: 5px; top:0; left:0; background-color:orange; font-size: 20px;"></div>
+	<button id="reset" style="position:absolute; padding: 5px; top:40; left:0; background-color:pink; font-size: 20px;"
+		onclick="reset(); redraw($$('can')); calculate();">reset</button>
+	<button id="set" style="position:absolute; padding: 5px; top:80; left:0; background-color:pink; font-size: 20px;"
+		onclick="set();">set</button>
+</body>
+</html>
+
+<script>
+
+// global vars
+var height = document.body.clientHeight;
+var width = document.body.clientWidth;
+var side = Math.min(height, width);
+var deviceIsPhone = height > width;
+var center = {x: 200, y: 200};
+var divWidth = side / 5;
+var divHeight = side / 10;
+var characters = [
+	{id: 0, name: '狼', color: 'red', attr: 'wolf'},
+	{id: 1, name: '民', color: 'white', attr: 'villager'},
+	{id: 2, name: '预', color: '#679fca', attr: 'god'},
+	{id: 3, name: '女', color: '#b15076', attr: 'god'},
+	{id: 4, name: '猎', color: 'green', attr: 'god'},
+	{id: 5, name: '白', color: '#ffe600', attr: 'god'},
+	{id: 6, name: '守', color: '#d40045', attr: 'god'},
+	{id: -1, name: '死', color: '#636363'}
+];
+
+var people = [];
+for(var i = 0; i < 12; i++)
+	people.push({id: 1, dead: false});
+
+function $$(id){
+	return document.getElementById(id);
+}
+
+function set() {
+	var msg = "添加新角色（如#812e45 1 熊），1神2民3狼，注意名字只可以有一个字\n仅输入一个数字则调整人数";
+	var color = '#'+(Math.random()*0xffffff<<0).toString(16);
+	var ch = "1";
+	var n = "熊";
+	var str = prompt(msg, color + " " + ch + " " + n);
+	var strs = str.split(/\s+/, 3);
+	/*
+	console.log(strs);
+	console.log(strs[0][0]);
+	console.log((strs[1] === '1' || strs[1] === '2' || strs[1] === '3'));
+	console.log((/[\u4E00-\u9FA5\uF900-\uFA2D]/).test(strs[2]));
+	*/
+	if(strs.length === 1) {
+		var number = parseInt(str);
+		if(number > 2) {
+			people.splice(0, people.length);
+			for(var i = 0; i < number; i++)
+				people.push({id: 1, dead: false});
+			redraw($$('can'));
+			for(var i = 0; i < divs.length; i++)
+				divs[i].remove();
+			divs.splice(0, divs.length);
+			setListener($$('can'), people.length, side / 25);
+			calculate();
+		}
+	} else if(strs.length === 3 && strs[0][0] === '#' && (strs[1] === '1' || strs[1] === '2' || strs[1] === '3') && 
+		(/[\u4E00-\u9FA5\uF900-\uFA2D]/).test(strs[2]) && strs[2].length == 1) {
+		var len = characters.length;
+		characters.splice(len - 1, 0, {id: len - 1, name: strs[2], color: strs[0], attr: (strs[1] === '1'? 'god': (strs[1] === '2'? 'villager': 'wolf'))});
+		console.log(characters);
+		for(var i = 0; i < divs.length; i++)
+			divs[i].remove();
+		divs.splice(0, divs.length);
+		setListener($$('can'), people.length, side / 25);
+	}
+}
+
+function findCharacterById(id) {
+	for(var i = 0; i < characters.length; i++)
+		if(characters[i].id == id)
+			return characters[i];
+}
+
+function setCanvasPosition(canvas) {
+	canvas.width = side;
+	canvas.height = side;
+	if(deviceIsPhone) {
+		canvas.style.top = (height - width) / 2;
+	} else {
+		canvas.style.left = (width - height) / 2;
+	}
+	center = {x: side / 2, y: side / 2};
+}
+
+function drawUnit(canvas, center, radius, degree, step, color) {
+	var cans = canvas.getContext('2d');
+	cans.beginPath();
+	var angle = 2 * Math.PI / degree.m;
+	var sAngle = angle * degree.n, eAngle = angle * (degree.n + 1) 
+	cans.arc(center.x, center.y, radius, sAngle - Math.PI / 2, eAngle - Math.PI / 2);
+	var nextX1 = center.x + (radius - step) * Math.sin(eAngle);
+	var nextY1 = center.y - (radius - step) * Math.cos(eAngle);
+	cans.lineTo(nextX1, nextY1);
+	var nextX2 = center.x + (radius - step) * Math.sin(sAngle);
+	var nextY2 = center.y - (radius - step) * Math.cos(sAngle);
+	var l = (radius - step) / Math.cos((eAngle - sAngle) / 2);
+	var px = center.x + l * Math.sin((sAngle + eAngle) / 2);
+	var py = center.y - l * Math.cos((sAngle + eAngle) / 2);
+	cans.arcTo(px, py, nextX2, nextY2, radius - step);
+	cans.closePath();
+	cans.lineWidth = 2;
+	cans.strokeStyle = 'black';
+	cans.fillStyle = color;
+	cans.stroke();
+	cans.fill();
+}
+
+function wordText(canvas, center, radius, degree, text, textSize) {
+	var cans = canvas.getContext('2d');
+	cans.beginPath();
+	var angle = 2 * Math.PI / degree.m;
+	var sAngle = angle * degree.n, eAngle = angle * (degree.n + 1) 
+	var nextX = center.x + radius * Math.sin((sAngle + eAngle) / 2);
+	var nextY = center.y - radius * Math.cos((sAngle + eAngle) / 2);
+	cans.font = textSize + "px Verdana";
+	cans.fillStyle = 'black';
+	cans.fillText(text, nextX - side / 22, nextY + side / 40);
+}
+
+function initDraw(){
+	for(var i = 0; i < people.length; i++) {
+		drawUnit($$('can'), center, side / 2 - 2, {n: i, m: people.length}, side / 40, findCharacterById(people[i].dead? -1: people[i].id).color);
+		wordText($$('can'), center, side / 2 - side / 11, {n: i, m: people.length}, (i + 1) + " " + findCharacterById(people[i].id).name, side / 20);
+	}
+}
+
+var index, btnId;
+var divs = [];
+var clicked = false;
+var time = 300;
+function setListener(canvas, degree, fontSize) {
+	for(var i = 0; i < characters.length; i++) {
+		var div = document.createElement('div');
+		div.style.backgroundColor = characters[i].color;
+		div.style.width = divWidth;
+		div.style.height = divHeight;
+		div.style.top = i * divHeight + "px";
+		div.style.left = "550px";
+		div.style.position = "absolute";
+		div.style.textAlign = "center";
+		div.style.lineHeight = divHeight + "px";
+		div.style.fontSize = fontSize + "px";
+		div.style.opacity = "0";
+		div.title = characters[i].id;
+		document.body.appendChild(div);
+		divs.push(div);
+	}
+	$(divs).hide();
+	canvas.onclick = function(event) {
+		if(clicked) {
+			clicked = false;
+			for(var i = 0; i < divs.length; i++)
+				$(divs[i]).animate({opacity: 0}, time, function() { $(divs).hide(); });
+			return;
+		}
+		x = event.pageX;
+		y = event.pageY;
+		if(deviceIsPhone)
+			y -= (height - width) / 2;
+		else x -= (width - height) / 2;
+		var vec1 = {x: 0, y: -1};
+		var vec2 = {x: x - center.x, y: y - center.y};
+		var cos = (vec1.x * vec2.x + vec1.y * vec2.y) / 1 / Math.sqrt(vec2.x * vec2.x + vec2.y * vec2.y);
+		var ang;
+		ang = Math.acos(cos);
+		if(x < center.x) ang = 2 * Math.PI - ang;
+		var area = parseInt(ang / (2 * Math.PI / degree));
+		index = area;
+		console.log('mouse click: ' + JSON.stringify({x: x, y: y}) + ", " + index);
+		var left = event.pageX, top = event.pageY;
+		if(left + divWidth > width)
+				left = width - divWidth;
+			if(top + divs.length * divHeight > height)
+				top = height - divs.length * divHeight;
+		$(divs).show();
+		for(var i = 0; i < divs.length; i++) {
+			divs[i].innerHTML = (index + 1) + " " + characters[i].name;
+			$(divs[i]).animate({opacity: 1}, time);
+			divs[i].style.left = left + "px";
+			divs[i].style.top = (top + i * divHeight) + "px";
+		}
+		clicked = true;
+	}
+	for(var i = 0; i < divs.length; i++) {
+		divs[i].onclick = function() {
+			clicked = false;
+			for(var j = 0; j < divs.length; j++)
+				$(divs[j]).animate({opacity: 0}, time, function() { $(divs).hide(); });
+			btnId = parseInt(this.title);
+			if(btnId < 0) // clicked 'dead'
+				people[index].dead = !people[index].dead;
+			else people[index].id = parseInt(btnId);
+			redraw(canvas);
+			calculate();
+		}
+	}
+}
+
+function calculate() {
+	var god = 0, villager = 0, wolf = 0;
+	for(var i = 0; i < people.length; i++) {
+		if(people[i].dead == false)
+			if(findCharacterById(people[i].id).attr === 'god') god++;
+			else if(findCharacterById(people[i].id).attr === 'villager') villager++;
+			else if(findCharacterById(people[i].id).attr === 'wolf') wolf++;
+	}
+	var msg = god + "神 " + villager + "民 " + wolf + "狼";
+	$$('msg').innerHTML = msg;
+}
+
+function redraw(canvas) {
+	canvas.getContext('2d').clearRect(0, 0, side, side);
+	initDraw();
+}
+
+function reset() {
+	for(var i = 0; i < people.length; i++)
+		people[i] = {id: 1, dead: false};
+}
+
+document.body.onload = function() {
+	console.log("width = " + width + ", height = " + height + ", side = " + side + ", deviceIsPhone = " + deviceIsPhone);
+	setCanvasPosition($$('can'));
+	initDraw();
+	setListener($$('can'), people.length, side / 25);
+	calculate();
+};
+
+</script>
